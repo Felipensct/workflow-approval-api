@@ -1,0 +1,131 @@
+# Desafio Tecnico Backend Pleno - Workflow InCicle
+
+## Contexto
+Você vai desenvolver uma API de workflow de aprovações corporativas para ambiente multiempresa.
+
+O foco é simular um cenário real da InCicle: templates versionados, instâncias de aprovação, delegação de aprovadores, auditoria imutável e acompanhamento de SLA.
+
+## Objetivo
+Implementar os endpoints e comportamentos definidos abaixo com autonomia de arquitetura e modelagem.
+
+## Requisitos de Plataforma
+- Framework obrigatório: NestJS (TypeScript).
+- Banco relacional obrigatório: PostgreSQL.
+- Processamento assíncrono obrigatório (fila/event stream/broker), com tecnologia à escolha do candidato.
+- Execução local com `docker compose up`.
+- Documentação da API em OpenAPI.
+- A entrega oficial será validada via Docker Compose em ambiente limpo.
+
+### Parametrização Obrigatória
+- O projeto deve usar variáveis de ambiente e fornecer `.env.example`.
+- Mínimo esperado no `.env.example`:
+- `APP_PORT`
+- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
+- `ASYNC_PROVIDER` (ex.: rabbitmq, kafka, redis-streams, sqs)
+- `ASYNC_URL` (ou conjunto equivalente, conforme tecnologia escolhida)
+- `LOG_LEVEL`
+- `SLA_DEFAULT_HOURS` (ou equivalente)
+
+### Execução Local (Opcional)
+- É permitido rodar sem Docker para desenvolvimento.
+- Mesmo assim, a avaliação oficial será feita apenas no fluxo com Docker Compose.
+
+## Contrato de API
+
+### 1) Templates e Versões
+- `POST /templates`
+- `POST /templates/{id}/versions`
+- `POST /templates/{id}/versions/{versionId}/publish`
+- `GET /templates`
+- `GET /templates/{id}`
+
+### 2) Instancias de Workflow
+- `POST /instances`
+- `POST /instances/{id}/submit`
+- `GET /instances`
+- `GET /instances/{id}`
+- `GET /instances/{id}/timeline`
+
+### 3) Aprovações
+- `GET /approvals/inbox`
+- `POST /approvals/{instanceId}/steps/{stepId}/approve`
+- `POST /approvals/{instanceId}/steps/{stepId}/reject`
+
+### 4) Delegações
+- `POST /delegations`
+- `GET /delegations`
+- `GET /delegations/active`
+- `DELETE /delegations/{id}`
+
+### 5) Operação e Monitoramento
+- `GET /analytics/sla-compliance`
+- `GET /health`
+- `GET /health/ready`
+
+## Comportamentos Obrigatórios
+- Multi-tenant por `company_id` em toda a aplicação.
+- Snapshot imutável no submit da instância com:
+- versão do template
+- fluxo resolvido
+- aprovadores resolvidos
+- contexto organizacional mínimo
+- Idempotência para ações de aprovação/reprovação.
+- Controle de concorrência para impedir dupla decisão no mesmo step.
+- Convergência de estado quando eventos/ações chegarem fora de ordem.
+- Auditoria imutável para toda mudança relevante.
+- SLA por etapa com registro de estouro e escalonamento.
+
+## Hard Requirements (Pleno Forte)
+- Regras de aprovação com suporte explícito a `ALL`, `ANY` e `QUORUM`.
+- Teste concorrente com `N` requisições simultâneas no mesmo step de aprovação (definir e justificar `N` no README).
+- Snapshot deve permanecer imutável mesmo após alteração de aprovador no organograma (org chart) depois do submit.
+- Delegação deve ter detecção de ciclo (ex.: A -> B -> C -> A deve ser bloqueado).
+- Justificar decisões de arquitetura para assíncrono/mensageria e seus trade-offs operacionais.
+
+## Regras Mínimas de Negócio
+- Uma instância só pode ser submetida se a versão estiver publicada.
+- Step aprovado não pode ser aprovado novamente.
+- Se houver delegação ativa e válida, a decisão do delegado deve ser aceita.
+- Delegação expirada não pode ser usada.
+- Toda ação de approve/reject deve gerar evento de auditoria.
+
+## Testes Obrigatórios
+- Testes unitários para regras de domínio.
+- Testes de integração com banco real.
+- Testes e2e cobrindo no mínimo:
+- criação e submit de instância com snapshot gerado
+- aprovação idempotente (mesma requisição repetida)
+- corrida concorrente com `N` requisições simultâneas no mesmo step (somente uma decisão efetiva)
+- uso de delegação ativa
+- delegação com ciclo (deve falhar com erro de domínio)
+- tentativa com delegação expirada
+- alteração de aprovador no org chart após submit (snapshot não deve mudar)
+- cenário de falha (dependência indisponível ou erro transiente)
+
+## Teste de Carga Obrigatório
+- Criar scripts de carga para:
+- `GET /approvals/inbox`
+- `POST /approvals/{instanceId}/steps/{stepId}/approve`
+- `GET /instances/{id}/timeline`
+- Ferramenta sugerida: `k6` (ou equivalente).
+- Entregar script e relatorio curto com:
+- throughput (req/s)
+- latência p95
+- taxa de erro
+- gargalo identificado
+- proposta de melhoria técnica
+- Parâmetros mínimos do teste:
+- base com pelo menos 10k instâncias
+- cenário com rampa e sustentação de carga (descrever no README)
+- taxa de erro < 2%
+- Se os objetivos de latência/erro não forem atingidos, o candidato deve justificar tecnicamente e propor plano de mitigação.
+
+## Entregáveis
+- Repositório Git com código fonte.
+- `README.md` com setup, decisões técnicas e trade-offs.
+- `openapi.yaml` (ou equivalente).
+- Migrations e seed.
+- Script de carga + relatorio em `LOAD_TEST.md`.
+- Colecao Postman/Insomnia ou arquivo `.http`.
+- `docker-compose.yml` funcional para subir API + banco + fila.
+- `.env.example` completo para reprodução do ambiente.

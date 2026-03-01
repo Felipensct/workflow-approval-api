@@ -1,0 +1,324 @@
+{
+  "info": {
+    "name": "API Workflow InCicle",
+    "description": "Coleção para testes manuais da API de workflow de aprovações (templates, instances, approvals, delegations, analytics, health).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000" },
+    { "key": "company_id", "value": "c1000000-0000-4000-8000-000000000001" },
+    { "key": "user_id", "value": "c1000000-0000-4000-8000-000000000001" },
+    { "key": "template_id", "value": "" },
+    { "key": "version_id", "value": "" },
+    { "key": "instance_id", "value": "" },
+    { "key": "step_id", "value": "" },
+    { "key": "delegation_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/health",
+            "description": "Verifica se a aplicação está no ar (sem headers de tenant)."
+          }
+        },
+        {
+          "name": "Readiness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/health/ready",
+            "description": "Verifica PostgreSQL e Redis (sem headers de tenant)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Templates",
+      "item": [
+        {
+          "name": "Listar templates",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/v1/templates",
+            "description": "Lista todos os templates da empresa."
+          }
+        },
+        {
+          "name": "Criar template",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Aprovação simples\",\n  \"description\": \"Template para fluxo de aprovação em 2 níveis\"\n}"
+            },
+            "url": "{{base_url}}/v1/templates",
+            "description": "Cria um novo template. Guarde o id retornado em template_id para as próximas requisições."
+          }
+        },
+        {
+          "name": "Obter template por ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/v1/templates/{{template_id}}",
+            "description": "Requer template_id preenchido (variável da coleção)."
+          }
+        },
+        {
+          "name": "Criar versão do template",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"definition\": {\n    \"steps\": [\n      { \"step_ref\": \"gerente\", \"rule\": \"ANY\", \"approvers\": [], \"sla_hours\": 24 },\n      { \"step_ref\": \"diretor\", \"rule\": \"ANY\", \"approvers\": [], \"sla_hours\": 48 }\n    ]\n  }\n}"
+            },
+            "url": "{{base_url}}/v1/templates/{{template_id}}/versions",
+            "description": "Cria uma versão (draft). Guarde version_id retornado para publicar."
+          }
+        },
+        {
+          "name": "Publicar versão",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/v1/templates/{{template_id}}/versions/{{version_id}}/publish",
+            "description": "Requer template_id e version_id. Altera status para published."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Instances",
+      "item": [
+        {
+          "name": "Listar instâncias",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/instances?status=pending",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "instances"],
+              "query": [{ "key": "status", "value": "pending" }]
+            },
+            "description": "Lista instâncias. Query status opcional: draft, pending, approved, rejected."
+          }
+        },
+        {
+          "name": "Criar instância (rascunho)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"template_version_id\": \"{{version_id}}\"\n}"
+            },
+            "url": "{{base_url}}/v1/instances",
+            "description": "Cria instância em draft. Requer version_id de uma versão publicada. Guarde instance_id."
+          }
+        },
+        {
+          "name": "Obter instância por ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/v1/instances/{{instance_id}}",
+            "description": "Requer instance_id."
+          }
+        },
+        {
+          "name": "Submeter instância",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/v1/instances/{{instance_id}}/submit",
+            "description": "Submete a instância: grava snapshot, cria instance_steps e agenda jobs de SLA. Requer instance_id."
+          }
+        },
+        {
+          "name": "Timeline da instância",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/v1/instances/{{instance_id}}/timeline",
+            "description": "Retorna instance + steps ordenados. Requer instance_id."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Approvals",
+      "item": [
+        {
+          "name": "Inbox",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/approvals/inbox?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "approvals", "inbox"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "description": "Steps pendentes onde o usuário pode aprovar/rejeitar (ou como delegado). Use stepId e instanceId da resposta para approve/reject."
+          }
+        },
+        {
+          "name": "Aprovar step",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/v1/approvals/instances/{{instance_id}}/steps/{{step_id}}/approve",
+            "description": "Requer instance_id e step_id (ex.: obtidos do Inbox). Idempotente."
+          }
+        },
+        {
+          "name": "Rejeitar step",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/v1/approvals/instances/{{instance_id}}/steps/{{step_id}}/reject",
+            "description": "Requer instance_id e step_id."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delegations",
+      "item": [
+        {
+          "name": "Listar delegações",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/v1/delegations",
+            "description": "Todas as delegações do usuário (delegator = user_id)."
+          }
+        },
+        {
+          "name": "Delegações ativas",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/v1/delegations/active",
+            "description": "Delegações não expiradas."
+          }
+        },
+        {
+          "name": "Criar delegação",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delegate_id\": \"c1000000-0000-4000-8000-000000000002\",\n  \"expires_at\": \"2026-12-31T23:59:59.000Z\"\n}"
+            },
+            "url": "{{base_url}}/v1/delegations",
+            "description": "Usuário atual (user_id) delega para delegate_id até expires_at (ISO 8601). 422 se houver ciclo."
+          }
+        },
+        {
+          "name": "Remover delegação",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": "{{base_url}}/v1/delegations/{{delegation_id}}",
+            "description": "Requer delegation_id."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "SLA Compliance",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Company-ID", "value": "{{company_id}}" },
+              { "key": "X-User-ID", "value": "{{user_id}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/analytics/sla-compliance",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "analytics", "sla-compliance"],
+              "query": [
+                { "key": "from", "value": "2026-01-01T00:00:00.000Z", "disabled": true },
+                { "key": "to", "value": "2026-12-31T23:59:59.000Z", "disabled": true }
+              ]
+            },
+            "description": "Métricas de conformidade de SLA. Query from/to opcionais (ISO 8601)."
+          }
+        }
+      ]
+    }
+  ]
+}

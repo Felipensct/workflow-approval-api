@@ -1,0 +1,619 @@
+openapi: 3.0.3
+info:
+  title: API Workflow InCicle
+  description: API de workflow de aprovações corporativas multiempresa.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3000
+    description: Local
+
+tags:
+  - name: templates
+    description: Templates e versões
+  - name: instances
+    description: Instâncias de workflow
+  - name: approvals
+    description: Inbox e aprovação/rejeição de steps
+  - name: delegations
+    description: Delegações de aprovação
+  - name: analytics
+    description: Métricas e SLA
+  - name: health
+    description: Liveness e readiness
+
+components:
+  securitySchemes:
+    tenantHeaders:
+      type: apiKey
+      in: header
+      name: X-Company-ID
+      description: UUID da empresa (obrigatório em todos os endpoints exceto health)
+    userHeader:
+      type: apiKey
+      in: header
+      name: X-User-ID
+      description: UUID do usuário (obrigatório em todos os endpoints exceto health)
+
+  parameters:
+    X-Company-ID:
+      in: header
+      name: X-Company-ID
+      required: true
+      schema: { type: string, format: uuid }
+      description: UUID da empresa (obrigatório exceto em /health)
+    X-User-ID:
+      in: header
+      name: X-User-ID
+      required: true
+      schema: { type: string, format: uuid }
+      description: UUID do usuário (obrigatório exceto em /health)
+
+  schemas:
+    Error:
+      type: object
+      required: [statusCode, error, message]
+      properties:
+        statusCode:
+          type: integer
+          example: 400
+        error:
+          type: string
+          example: Bad Request
+        message:
+          type: string
+          example: Header X-Company-ID é obrigatório
+    DomainError:
+      type: object
+      required: [statusCode, error, message]
+      properties:
+        statusCode:
+          type: integer
+          enum: [409, 422]
+        error:
+          type: string
+          enum:
+            - DELEGATION_CYCLE_DETECTED
+            - DELEGATION_EXPIRED
+            - STEP_ALREADY_RESOLVED
+            - VERSION_NOT_PUBLISHED
+            - DUPLICATE_VOTE
+        message:
+          type: string
+
+    Template:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    TemplateVersion:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        template_id: { type: string, format: uuid }
+        version_number: { type: integer }
+        status: { type: string, example: draft }
+        definition: { type: object }
+        published_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    CreateTemplateBody:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 500 }
+        description: { type: string, maxLength: 2000, nullable: true }
+    CreateVersionBody:
+      type: object
+      required: [definition]
+      properties:
+        definition: { type: object }
+
+    WorkflowInstance:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        template_version_id: { type: string, format: uuid }
+        snapshot: { type: object }
+        status: { type: string, enum: [draft, pending, approved, rejected] }
+        submitted_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+    CreateInstanceBody:
+      type: object
+      required: [template_version_id]
+      properties:
+        template_version_id: { type: string, format: uuid }
+
+    InstanceStep:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        step_ref: { type: string }
+        order_index: { type: integer }
+        rule: { type: string }
+        status: { type: string }
+        sla_hours: { type: integer }
+        sla_deadline: { type: string, format: date-time, nullable: true }
+        sla_breached: { type: boolean }
+        resolved_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+    TimelineResponse:
+      type: object
+      properties:
+        instance: { $ref: '#/components/schemas/WorkflowInstance' }
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/InstanceStep' }
+
+    InboxItem:
+      type: object
+      properties:
+        stepId: { type: string, format: uuid }
+        instanceId: { type: string, format: uuid }
+        stepRef: { type: string }
+        orderIndex: { type: integer }
+        instanceSubmittedAt: { type: string, format: date-time, nullable: true }
+    InboxResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/InboxItem' }
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+    ApproveRejectResponse:
+      type: object
+      properties:
+        ok: { type: boolean, example: true }
+
+    Delegation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        company_id: { type: string, format: uuid }
+        delegator_id: { type: string, format: uuid }
+        delegate_id: { type: string, format: uuid }
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+    CreateDelegationBody:
+      type: object
+      required: [delegate_id, expires_at]
+      properties:
+        delegate_id: { type: string, format: uuid }
+        expires_at: { type: string, format: date-time }
+
+    SlaComplianceResponse:
+      type: object
+      properties:
+        total_instances: { type: integer }
+        total_steps: { type: integer }
+        breached_steps: { type: integer }
+        compliance_rate: { type: number }
+        breached_by_step:
+          type: object
+          additionalProperties: { type: integer }
+        period:
+          type: object
+          properties:
+            from: { type: string }
+            to: { type: string }
+
+    HealthLiveness:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+    HealthReady:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+        info: { type: object }
+        error: { type: object }
+
+  responses:
+    BadRequest:
+      description: Requisição inválida (ex. headers X-Company-ID / X-User-ID ausentes)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            statusCode: 400
+            error: Bad Request
+            message: Header X-Company-ID é obrigatório
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Conflito (ex. DUPLICATE_VOTE, STEP_ALREADY_RESOLVED)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/DomainError' }
+    Unprocessable:
+      description: Erro de domínio (422, ex. DELEGATION_CYCLE_DETECTED, DELEGATION_EXPIRED, VERSION_NOT_PUBLISHED)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/DomainError' }
+
+paths:
+  /v1/templates:
+    get:
+      tags: [templates]
+      summary: Lista templates da empresa
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      responses:
+        '200':
+          description: Lista de templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Template' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      tags: [templates]
+      summary: Cria template
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTemplateBody' }
+      responses:
+        '201':
+          description: Template criado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/templates/{id}:
+    get:
+      tags: [templates]
+      summary: Obtém template por ID
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Template
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Template' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/templates/{id}/versions:
+    post:
+      tags: [templates]
+      summary: Cria versão do template
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateVersionBody' }
+      responses:
+        '201':
+          description: Versão criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateVersion' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/templates/{id}/versions/{versionId}/publish:
+    post:
+      tags: [templates]
+      summary: Publica versão do template
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: versionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Versão publicada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TemplateVersion' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/instances:
+    get:
+      tags: [instances]
+      summary: Lista instâncias da empresa
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, pending, approved, rejected] }
+      responses:
+        '200':
+          description: Lista de instâncias
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WorkflowInstance' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      tags: [instances]
+      summary: Cria instância (rascunho)
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateInstanceBody' }
+      responses:
+        '201':
+          description: Instância criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowInstance' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/instances/{id}:
+    get:
+      tags: [instances]
+      summary: Obtém instância por ID
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Instância
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowInstance' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/instances/{id}/submit:
+    post:
+      tags: [instances]
+      summary: Submete instância (cria steps e snapshot)
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Instância submetida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorkflowInstance' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/instances/{id}/timeline:
+    get:
+      tags: [instances]
+      summary: Timeline da instância (instance + steps)
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Timeline
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimelineResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/approvals/inbox:
+    get:
+      tags: [approvals]
+      summary: Inbox do aprovador (steps pendentes onde o usuário pode atuar)
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Itens do inbox
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InboxResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/approvals/instances/{instanceId}/steps/{stepId}/approve:
+    post:
+      tags: [approvals]
+      summary: Aprova step
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: stepId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Aprovado (ou já aprovado, idempotente)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApproveRejectResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { description: Usuário não é aprovador nem delegado }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/approvals/instances/{instanceId}/steps/{stepId}/reject:
+    post:
+      tags: [approvals]
+      summary: Rejeita step
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      parameters:
+        - name: instanceId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: stepId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Rejeitado (ou já resolvido, idempotente)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApproveRejectResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { description: Usuário não é aprovador nem delegado }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/delegations:
+    get:
+      tags: [delegations]
+      summary: Lista delegações da empresa
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      responses:
+        '200':
+          description: Lista de delegações
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Delegation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    post:
+      tags: [delegations]
+      summary: Cria delegação
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateDelegationBody' }
+      responses:
+        '201':
+          description: Delegação criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Delegation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/delegations/active:
+    get:
+      tags: [delegations]
+      summary: Lista delegações ativas (não expiradas)
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      responses:
+        '200':
+          description: Lista de delegações ativas
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Delegation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /v1/delegations/{id}:
+    delete:
+      tags: [delegations]
+      summary: Remove delegação
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Delegação removida (sem body)
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/analytics/sla-compliance:
+    get:
+      tags: [analytics]
+      summary: Conformidade de SLA (métricas por período)
+      security: [{ tenantHeaders: [] }, { userHeader: [] }]
+      parameters:
+        - name: from
+          in: query
+          description: Início do período (ISO 8601)
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: Fim do período (ISO 8601)
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Métricas de SLA
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SlaComplianceResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /health:
+    get:
+      tags: [health]
+      summary: Liveness (aplicação no ar)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthLiveness' }
+
+  /health/ready:
+    get:
+      tags: [health]
+      summary: Readiness (PostgreSQL e Redis)
+      responses:
+        '200':
+          description: Dependências OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthReady' }
+        '503':
+          description: Alguma dependência indisponível
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthReady' }
