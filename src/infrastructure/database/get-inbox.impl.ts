@@ -9,6 +9,9 @@ import type {
   GetInboxResult,
   InboxItem,
 } from '../../application/approvals/get-inbox.port';
+import { InboxCacheService } from '../cache/inbox-cache.service';
+
+const INBOX_STEPS_QUERY_LIMIT = 2000;
 
 @Injectable()
 export class GetInboxImpl implements GetInboxPort {
@@ -19,9 +22,24 @@ export class GetInboxImpl implements GetInboxPort {
     private readonly instanceRepo: Repository<WorkflowInstancePersistence>,
     @InjectRepository(DelegationPersistence)
     private readonly delegationRepo: Repository<DelegationPersistence>,
+    private readonly inboxCache: InboxCacheService,
   ) {}
 
   async getInbox(
+    companyId: string,
+    userId: string,
+    page: number,
+    limit: number,
+  ): Promise<GetInboxResult> {
+    const cached = await this.inboxCache.get(companyId, userId, page, limit);
+    if (cached) return cached;
+
+    const result = await this.computeInbox(companyId, userId, page, limit);
+    await this.inboxCache.set(companyId, userId, page, limit, result);
+    return result;
+  }
+
+  private async computeInbox(
     companyId: string,
     userId: string,
     page: number,
@@ -48,6 +66,7 @@ export class GetInboxImpl implements GetInboxPort {
       )
       .where('step.status = :status', { status: 'pending' })
       .orderBy('step.order_index', 'ASC')
+      .limit(INBOX_STEPS_QUERY_LIMIT)
       .getMany();
 
     const instanceIds = [...new Set(steps.map((s) => s.instance_id))];
@@ -98,3 +117,4 @@ export class GetInboxImpl implements GetInboxPort {
     return { items, total, page, limit };
   }
 }
+

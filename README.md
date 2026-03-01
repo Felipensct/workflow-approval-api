@@ -199,23 +199,29 @@ k6 run load-tests/timeline.test.js
 
 Para testes manuais, importe a coleção em `postman/API-Workflow-InCicle.postman_collection.json`. Inclui todos os endpoints (templates, instances, approvals, delegations, analytics, health) e variáveis para `base_url`, `X-Company-ID` e `X-User-ID`. Ver [postman/README.md](postman/README.md).
 
-### Estrutura de pastas (Etapa 1.2)
+### Estrutura de pastas
 
 ```
 src/
-├── domain/           # entidades e regras de negócio (a preencher na Etapa 2)
-├── application/      # use cases (a preencher nas etapas 5+)
-├── infrastructure/   # banco, filas, health
-│   └── database/     # TypeORM, migrations, Redis health
-└── presentation/    # controllers, DTOs
-    └── health/       # GET /health e GET /health/ready
+├── domain/           # entidades, value objects, exceções e serviços de domínio (sem infra)
+├── application/      # use cases, ports e adapters (templates, instances, approvals, delegations, analytics)
+├── infrastructure/   # persistência (TypeORM, migrations, seeds), filas (BullMQ), health
+│   ├── database/     # entities de persistência, repositórios, migrations, seeds, Redis health
+│   └── messaging/    # processadores de fila (audit, SLA)
+└── presentation/     # controllers, DTOs, filters, middleware (tenant), guards
+    ├── health/       # GET /health (liveness) e GET /health/ready (readiness)
+    ├── templates/    # templates e versões
+    ├── instances/    # instâncias, submit, timeline
+    ├── approvals/    # inbox, approve, reject
+    ├── delegations/  # CRUD de delegações
+    └── analytics/    # sla-compliance
 test/
-├── unit/
-├── integration/
-└── e2e/
-load-tests/
-postman/             # Coleção Postman (API-Workflow-InCicle.postman_collection.json)
-openapi.yaml         # Especificação OpenAPI 3 (endpoints, schemas, erros 400/409/422/503)
+├── unit/             # ApprovalRuleService, DelegationCycleService, SlaService, Snapshot VO
+├── integration/      # repositórios com PostgreSQL, constraint step_votes
+└── e2e/              # fluxo completo (workflow.e2e-spec.ts)
+load-tests/           # scripts k6 (inbox, approve, timeline)
+postman/              # coleção Postman (API-Workflow-InCicle.postman_collection.json)
+openapi.yaml          # especificação OpenAPI 3 (endpoints, schemas, erros 4xx/5xx)
 ```
 
 ### Documentação e entregáveis

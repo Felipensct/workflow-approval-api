@@ -8,6 +8,7 @@ import { DelegationPersistence } from '../../infrastructure/database/entities/de
 import { ApprovalTransactionService } from '../../infrastructure/database/approval-transaction.service';
 import { AuditPublisherImpl, AUDIT_QUEUE_NAME } from '../../infrastructure/messaging/audit-publisher.impl';
 import { GetInboxImpl } from '../../infrastructure/database/get-inbox.impl';
+import { InboxCacheService } from '../../infrastructure/cache/inbox-cache.service';
 import { GetInboxUseCase } from '../../application/approvals/get-inbox.usecase';
 import { ApproveStepUseCase } from '../../application/approvals/approve-step.usecase';
 import { RejectStepUseCase } from '../../application/approvals/reject-step.usecase';
@@ -30,6 +31,7 @@ import {
   ],
   controllers: [ApprovalsController],
   providers: [
+    InboxCacheService,
     { provide: AUDIT_PUBLISHER_PORT, useClass: AuditPublisherImpl },
     { provide: APPROVAL_TRANSACTION_PORT, useClass: ApprovalTransactionService },
     { provide: GET_INBOX_PORT, useClass: GetInboxImpl },
