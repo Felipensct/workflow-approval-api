@@ -1,3 +1,4 @@
+# Estágio builder: dependências e build rodam dentro da imagem (não no host).
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -6,6 +7,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
+# Estágio final: só produção; npm ci roda no build dentro da imagem.
 FROM node:20-alpine
 
 WORKDIR /app

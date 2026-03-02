@@ -49,7 +49,7 @@ services:
     ports:
       - "6379:6379"
 
-  # Serviço one-off: rodar seed dentro do Docker (qualquer SO). Uso: docker compose run --rm seed
+  # Serviço one-off: rodar seed dentro do Docker. Uso: docker compose run --rm seed
   seed:
     build:
       context: .
@@ -64,6 +64,89 @@ services:
     depends_on:
       api:
         condition: service_started
+
+  # Serviço one-off: seed de carga (10k instâncias) para testes de carga com k6. Uso: docker compose run --rm seed-load
+  seed-load:
+    build:
+      context: .
+      target: builder
+    command: ["npm", "run", "seed:load"]
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-incicle}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    depends_on:
+      api:
+        condition: service_started
+
+  # k6: rodar testes de carga dentro do Docker. Uso: docker compose --profile load run --rm k6 load-tests/inbox.test.js
+  k6:
+    image: grafana/k6:latest
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      BASE_URL: http://api:3000
+      COMPANY_ID: c1000000-0000-4000-8000-000000000001
+      USER_ID: c1000000-0000-4000-8000-000000000001
+    depends_on:
+      api:
+        condition: service_started
+    profiles:
+      - load
+    entrypoint: ["k6", "run"]
+
+  # Testes dentro do container (não exige Node no host). Uso: docker compose run --rm test-unit | test-integration | test-e2e
+  test-unit:
+    build:
+      context: .
+      target: builder
+    command: ["npm", "run", "test:unit"]
+    profiles:
+      - test
+
+  test-integration:
+    build:
+      context: .
+      target: builder
+    command: ["npm", "run", "test:integration"]
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-incicle}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    depends_on:
+      api:
+        condition: service_started
+    profiles:
+      - test
+
+  test-e2e:
+    build:
+      context: .
+      target: builder
+    command: ["npm", "run", "test:e2e"]
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-incicle}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      ASYNC_PROVIDER: bullmq
+      ASYNC_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles:
+      - test
 
 volumes:
   postgres_data:
