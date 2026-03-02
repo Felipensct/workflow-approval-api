@@ -109,7 +109,7 @@ O container k6 usa a imagem oficial `grafana/k6` e acessa a API em `http://api:3
 
 A API usa **BullMQ** com **Redis** para filas (jobs de SLA, auditoria). Justificativa:
 
-- **NestJS:** integração nativa com `@nestjs/bullmq`; menos boilerplate que adaptadores para RabbitMQ/Kafka.
+- **NestJS:** integração nativa com `@nestjs/bullmq`; exige menos código de configuração e conexão do que adaptadores para RabbitMQ/Kafka.
 - **Operação:** um único broker (Redis); menos dependências para ambiente de avaliação.
 - **Latência:** para volumes moderados (SLA e auditoria), Redis é suficiente; Kafka/RabbitMQ são mais relevantes em throughput muito alto e retenção longa.
 - **Trade-off:** em produção com alto volume de eventos ou necessidade de replay em log imutável, Kafka poderia ser considerado.
