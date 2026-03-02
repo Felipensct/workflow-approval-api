@@ -1,8 +1,7 @@
 /**
  * Teste de integração: constraint UNIQUE(step_id, approver_id) em step_votes.
- * Requer: migrations rodadas, seed rodado, e ao menos uma instância submetida (com steps).
- * Execute com: npm run test:integration
- * (Com docker compose up e npm run seed; depois crie uma instância e submeta via API ou seed-load.)
+ * Requer: migrations rodadas e seed rodado (o seed básico já cria 1 instância submetida com 2 steps).
+ * Execute com: npm run test:integration (após docker compose up e docker compose run --rm seed, ou npm run seed no host).
  */
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
