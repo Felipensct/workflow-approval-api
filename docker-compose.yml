@@ -49,5 +49,21 @@ services:
     ports:
       - "6379:6379"
 
+  # Serviço one-off: rodar seed dentro do Docker (qualquer SO). Uso: docker compose run --rm seed
+  seed:
+    build:
+      context: .
+      target: builder
+    command: ["npm", "run", "seed"]
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-incicle}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    depends_on:
+      api:
+        condition: service_started
+
 volumes:
   postgres_data:

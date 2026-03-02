@@ -2,89 +2,11 @@
 
 API de workflow de aprovações corporativas para ambiente multiempresa (desafio técnico InCicle).
 
----
-
-## 1.1 Instalação do ambiente (Fedora)
-
-Estas instruções consideram um **Fedora atualizado** sem Node.js, Docker, Git ou k6 instalados. Execute os comandos na ordem indicada.
-
-### Git
-
-```bash
-sudo dnf install -y git
-git --version
-```
-
-### Node.js 20 LTS
-
-**Opção A — NodeSource (recomendado para Node 20):**
-
-```bash
-curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
-sudo dnf install -y nodejs
-node -v   # deve ser v20.x
-npm -v
-```
-
-**Opção B — Repositório padrão Fedora:**
-
-```bash
-sudo dnf install -y nodejs npm
-node -v   # confira se é 18+ (recomendado 20+)
-npm -v
-```
-
-### Docker Engine e Docker Compose
-
-```bash
-sudo dnf install -y dnf-plugins-core
-```
-
-Adicione o repositório Docker. A sintaxe depende da versão do DNF:
-
-- **Fedora 41+ (DNF 5)** — use:
-  ```bash
-  sudo dnf config-manager addrepo --from-repofile=https://download.docker.com/linux/fedora/docker-ce.repo
-  ```
-- **Fedora 40 ou anterior (DNF 4)** — use:
-  ```bash
-  sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
-  ```
-
-Em seguida:
-
-```bash
-sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo systemctl enable --now docker
-sudo usermod -aG docker "$USER"
-```
-
-Faça **logout e login** (ou execute `newgrp docker`) para o grupo `docker` passar a valer. Depois confira:
-
-```bash
-docker --version
-docker compose version
-```
-
-**Erro "permission denied while trying to connect to the Docker API":** o usuário atual não está no grupo `docker` ou a sessão não recarregou o grupo. Soluções:
-- **Opção 1:** abrir um **novo terminal** e rodar `newgrp docker` (ou fazer logout e login) e tentar de novo.
-- **Opção 2:** usar sudo: `sudo docker compose up --build` (menos ideal; arquivos criados pelos containers podem ficar como root).
-
-### k6 (testes de carga)
-
-O k6 não vem nos repositórios padrão do Fedora. Adicione o repositório oficial do k6 e instale:
-
-```bash
-sudo dnf install -y https://dl.k6.io/rpm/repo.rpm
-sudo dnf install -y k6
-k6 version
-```
-
-Alternativa via Snap (se tiver Snap instalado): `sudo snap install k6`
+**Validação:** a entrega oficial é validada via Docker Compose em ambiente limpo. O projeto garante que tudo funciona corretamente no Docker, independente do sistema operacional do host (Linux, macOS, Windows). Não é obrigatório ter Node.js instalado na máquina para subir a API e rodar o seed.
 
 ---
 
-## 1.2 Execução do projeto
+## 1. Execução do projeto
 
 Variáveis de ambiente são carregadas a partir de `.env`. Copie o exemplo e ajuste se necessário:
 
@@ -92,20 +14,42 @@ Variáveis de ambiente são carregadas a partir de `.env`. Copie o exemplo e aju
 cp .env.example .env
 ```
 
-### Com Docker Compose (recomendado)
+### Com Docker Compose (recomendado — qualquer SO)
 
-Na raiz do projeto:
+Na raiz do projeto, com Docker e Docker Compose instalados:
 
 ```bash
 docker compose up --build
 ```
 
-Se aparecer *permission denied* no Docker, veja a seção de instalação do Docker acima (grupo `docker` / `newgrp docker`).
-
 A API sobe na porta 3000. As migrations rodam automaticamente no boot. Endpoints de saúde:
 
 - **Liveness:** `GET http://localhost:3000/health`
 - **Readiness:** `GET http://localhost:3000/health/ready` (verifica PostgreSQL e Redis)
+
+### Seed (dados iniciais) — com Docker
+
+Após a API estar rodando (`docker compose up --build`), rode o seed **dentro do Docker** (não é necessário ter Node.js no host):
+
+```bash
+docker compose run --rm seed
+```
+
+Isso popula 1 empresa, 3 membros do organograma, 1 template e 1 versão publicada (útil para testes manuais e e2e).
+
+### Seed e testes no host (opcional)
+
+Se quiser rodar seed ou testes (unit, integration, e2e) **na sua máquina** em vez de no Docker, é necessário instalar as dependências antes:
+
+```bash
+npm install
+```
+
+Depois, por exemplo:
+
+- Seed básico: `npm run seed` (com API e Postgres acessíveis; use `DB_HOST=localhost` etc. no `.env` se os serviços estiverem no host ou expostos).
+- Seed de carga: `npm run seed:load`
+- Testes: `npm run test:unit`, `npm run test:integration`, `npm run test:e2e` (e2e exige serviços rodando e seed básico aplicado).
 
 ### Sem Docker (desenvolvimento)
 
@@ -139,18 +83,9 @@ Ou em modo watch: `npm run start:dev`
 | `LOG_LEVEL`      | Nível de log                 | `info`               |
 | `SLA_DEFAULT_HOURS` | SLA padrão em horas (steps sem definição) | `24` |
 
-### Seed (dados iniciais)
-
-Após subir a API (com Docker ou local), rode o seed para popular 1 empresa, 3 membros do organograma, 1 template e 1 versão publicada (útil para testes manuais e e2e):
-
-```bash
-# Com Docker: rode dentro do container ou com variáveis apontando para o banco
-npm run seed
-```
-
-Com Docker Compose em execução, use as mesmas variáveis do .env; o script conecta em `DB_HOST`/`DB_PORT` (localhost se o seed rodar na máquina e o Postgres estiver exposto em 5432).
-
 ### Rodando os testes
+
+**Se rodar na sua máquina:** execute `npm install` antes de qualquer comando abaixo.
 
 #### Testes unitários
 
@@ -160,7 +95,7 @@ npm run test:unit
 
 #### Testes de integração
 
-Requer PostgreSQL rodando (ex.: `docker compose up -d postgres`).
+Requer PostgreSQL rodando (ex.: `docker compose up -d postgres`). No host, use `DB_HOST=localhost` (ou o que estiver no `.env`).
 
 ```bash
 npm run test:integration
@@ -168,16 +103,20 @@ npm run test:integration
 
 #### Testes E2E
 
-Requer todos os serviços rodando (ex.: `docker compose up -d`), além do seed.
+Requer todos os serviços rodando (ex.: `docker compose up -d`) e dados iniciais aplicados. Seed pelo Docker ou no host:
+
+- **Pelo Docker:** `docker compose run --rm seed`
+- **No host:** `npm install` e depois `npm run seed` (com `.env` apontando para o banco)
+
+Em seguida:
 
 ```bash
-npm run seed
 npm run test:e2e
 ```
 
 ### Seed de carga (testes de carga / k6)
 
-Para base realista em testes de carga (ex.: k6), use o seed de carga: 2 empresas, ~100 usuários por empresa no organograma e 10.000 instâncias de workflow (40% pending, 30% approved, 20% rejected, 10% draft). Recomendável rodar com banco vazio ou dedicado, após as migrations.
+Para base realista em testes de carga (ex.: k6): 2 empresas, ~100 usuários por empresa no organograma e 10.000 instâncias (40% pending, 30% approved, 20% rejected, 10% draft). Rodar com banco vazio ou dedicado, após as migrations. **No host:** rode `npm install` antes.
 
 ```bash
 npm run seed:load
@@ -185,7 +124,7 @@ npm run seed:load
 
 ### Testes de carga (k6)
 
-Scripts em `load-tests/`: `inbox.test.js`, `approve.test.js`, `timeline.test.js`. Rodar após o seed de carga. Relatório e critérios em [LOAD_TEST.md](LOAD_TEST.md).
+Scripts em `load-tests/`: `inbox.test.js`, `approve.test.js`, `timeline.test.js`. Rodar após o seed de carga. Relatório e critérios em [LOAD_TEST.md](LOAD_TEST.md). **k6 deve estar instalado no host** (veja seção "Instalação no host", abaixo).
 
 **Cenário:** rampa de subida 30s, sustentação 2min, rampa de descida 15s. Critérios de sucesso: `http_req_failed < 2%`, `http_req_duration` p95 &lt; 500 ms.
 
@@ -232,13 +171,74 @@ openapi.yaml          # especificação OpenAPI 3 (endpoints, schemas, erros 4xx
 | [LOAD_TEST.md](LOAD_TEST.md) | Relatório de testes de carga (k6): throughput, latência p95, taxa de erro, gargalos e melhorias sugeridas. |
 | [postman/](postman/) | Coleção Postman com todos os endpoints e variáveis (base_url, X-Company-ID, X-User-ID). |
 | `src/infrastructure/database/migrations/` | Migrations TypeORM (companies, org_chart, templates, instances, steps, votes, delegations, audit_logs, índices). |
-| `npm run seed` | Seed básico (1 empresa, 3 membros, 1 template/versão) para testes manuais e E2E. |
-| `npm run seed:load` | Seed de carga (2 empresas, 200 membros, 10k instâncias) para k6. |
+| `docker compose run --rm seed` | Seed básico dentro do Docker (recomendado; não exige Node no host). |
+| `npm run seed` | Seed básico no host (1 empresa, 3 membros, 1 template/versão); requer `npm install` antes. |
+| `npm run seed:load` | Seed de carga no host (2 empresas, 200 membros, 10k instâncias) para k6; requer `npm install` antes. |
 | [load-tests/](load-tests/) | Scripts k6: inbox, approve, timeline. |
 
 ---
 
-## Decisões técnicas
+## 2. Instalação no host (opcional)
+
+Só é necessário se você quiser rodar a API ou os testes **fora do Docker** (ex.: desenvolvimento local) ou rodar **k6** para testes de carga. Em muitos sistemas já existem Docker e Docker Compose; nesse caso, a execução com Docker (seção 1) basta.
+
+Exemplo abaixo para **Fedora**. Em outros sistemas, use o instalador oficial de Node.js, Docker e k6.
+
+### Git
+
+```bash
+sudo dnf install -y git
+git --version
+```
+
+### Node.js 20 LTS (para seed/testes no host)
+
+**Opção A — NodeSource (recomendado para Node 20):**
+
+```bash
+curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+sudo dnf install -y nodejs
+node -v   # deve ser v20.x
+npm -v
+```
+
+**Opção B — Repositório padrão Fedora:**
+
+```bash
+sudo dnf install -y nodejs npm
+node -v   # confira se é 18+ (recomendado 20+)
+npm -v
+```
+
+### Docker Engine e Docker Compose
+
+```bash
+sudo dnf install -y dnf-plugins-core
+```
+
+- **Fedora 41+ (DNF 5):** `sudo dnf config-manager addrepo --from-repofile=https://download.docker.com/linux/fedora/docker-ce.repo`
+- **Fedora 40 ou anterior (DNF 4):** `sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo`
+
+```bash
+sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+```
+
+Faça logout e login (ou `newgrp docker`) e confira: `docker --version` e `docker compose version`.  
+Se aparecer *permission denied* ao usar Docker, use um novo terminal com `newgrp docker` ou `sudo docker compose up --build`.
+
+### k6 (testes de carga)
+
+```bash
+sudo dnf install -y https://dl.k6.io/rpm/repo.rpm
+sudo dnf install -y k6
+k6 version
+```
+
+---
+
+## 3. Decisões técnicas
 
 ### BullMQ/Redis em vez de RabbitMQ/Kafka
 
@@ -264,10 +264,5 @@ O cenário E2E **“Corrida concorrente”** envia **N=20** requisições parale
 
 ## Verificação rápida (ambiente)
 
-Após instalar tudo:
-
-```bash
-git --version && node -v && npm -v && docker --version && docker compose version && k6 version
-```
-
-Todos os comandos devem retornar versão sem erro.
+- **Apenas Docker:** confira que Docker e Docker Compose estão disponíveis: `docker --version && docker compose version`. Depois: `cp .env.example .env && docker compose up --build` e, em outro terminal, `docker compose run --rm seed`.
+- **Com Node/k6 no host:** além do acima, `node -v && npm -v && k6 version`. Antes de rodar seed ou testes no host, execute `npm install`.
