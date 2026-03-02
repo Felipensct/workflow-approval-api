@@ -2,7 +2,7 @@
 
 API de workflow de aprovações corporativas para ambiente multiempresa (desafio técnico InCicle).
 
-A entrega é validada via **Docker Compose em ambiente limpo**. Tudo (API, seed, testes unitários, de integração e e2e) roda com Docker; não é necessário ter Node.js instalado no host.
+O projeto foi desenvolvido com **Docker Compose em ambiente limpo**. Tudo (API, seed, testes unitários, de integração e e2e) roda com Docker; não é necessário ter Node.js instalado no host.
 
 ---
 
@@ -104,6 +104,14 @@ O container k6 usa a imagem oficial `grafana/k6` e acessa a API em `http://api:3
 ---
 
 ## Decisões técnicas e trade-offs
+
+### Arquitetura: Clean Architecture (camadas)
+
+O projeto segue **Clean Architecture** (domain, application, infrastructure, presentation) para separar regras de negócio da infraestrutura e do framework.
+
+- **Domain** sem dependências externas: entidades, value objects, exceções e serviços de domínio são testáveis em isolamento e independentes de NestJS, TypeORM ou filas.
+- **Application** define use cases e ports (interfaces); adapters concretos ficam em **infrastructure** (repositórios, filas, health) e **presentation** (controllers, DTOs). Facilita testes unitários com mocks e troca de implementações (ex.: outro broker assíncrono) sem alterar regras.
+- **Trade-off:** mais camadas e indireção em relação a um CRUD monolítico; o ganho é manutenção, testabilidade e alinhamento com requisitos de domínio rico (snapshot imutável, regras ALL/ANY/QUORUM, delegação com detecção de ciclo, auditoria).
 
 ### Assíncrono / mensageria: BullMQ + Redis
 
